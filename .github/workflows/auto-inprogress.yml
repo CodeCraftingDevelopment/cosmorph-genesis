@@ -19,24 +19,24 @@ jobs:
       - name: Move issues via GitHub API
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROJECT_ID: "PVT_kwHODXeC6c4BAqMI"
+          STATUS_FIELD_ID: "PVTSSF_lAHODXeC6c4BAqMIzgzZahU"
+          OPTION_ID: "47fc9ee4"
         run: |
           # Récupère tous les refs #ID
           ISSUES=$(git log ${{ github.event.before }}..${{ github.sha }} --pretty=%B | grep -oE 'refs #[0-9]+' | tr -d 'refs #' | tr '\n' ' ')
 
-          # ID du projet v2
-          PROJECT_ID="PVT_kwHODXeC6c4BAqMI"
-          STATUS_FIELD_ID="PVTSSF_lAHODXeC6c4BAqMIzgzZahU"
-          OPTION_ID="47fc9ee4"
-
           for ISSUE_ID in $ISSUES; do
-            echo "Moving issue $ISSUE_ID to In Progress"
+            echo "Processing issue $ISSUE_ID"
 
-            # Récupérer l'ID de l'item dans le projet v2
+            # Récupérer l'item du projet correspondant à l'issue
             ITEM_ID=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" \
-              -X POST -d "{\"query\":\"query { repository(owner: \\\"${GITHUB_REPOSITORY_OWNER}\\\", name: \\\"${GITHUB_REPOSITORY_NAME}\\\") { issue(number: $ISSUE_ID) { id } } }\"}" \
-              https://api.github.com/graphql | jq -r '.data.repository.issue.id')
+              -X POST -d "{\"query\":\"query { repository(owner: \\\"${GITHUB_REPOSITORY_OWNER}\\\", name: \\\"${GITHUB_REPOSITORY_NAME}\\\") { issue(number: $ISSUE_ID) { projectItems(first: 10) { nodes { id project { id } } } } } }\"}" \
+              https://api.github.com/graphql | jq -r --arg PROJECT_ID "$PROJECT_ID" '.data.repository.issue.projectItems.nodes[] | select(.project.id == $PROJECT_ID) | .id')
 
-            # Mettre à jour le champ Status pour déplacer l'item en In Progress
+            echo "Found project item: $ITEM_ID"
+
+            # Mettre à jour le champ Status
             curl -s -H "Authorization: bearer $GITHUB_TOKEN" -X POST \
               -d "{\"query\":\"mutation { updateProjectV2ItemFieldValue(input: { projectId: \\\"$PROJECT_ID\\\", itemId: \\\"$ITEM_ID\\\", fieldId: \\\"$STATUS_FIELD_ID\\\", value: { singleSelectOptionId: \\\"$OPTION_ID\\\" } }) { projectV2Item { id } } }\"}" \
               https://api.github.com/graphql
