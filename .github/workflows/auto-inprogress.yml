@@ -6,7 +6,7 @@ on:
       - '**'
 
 jobs:
-  move_issue_to_in_progress:
+  move_issue:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -23,21 +23,48 @@ jobs:
           STATUS_FIELD_ID: "PVTSSF_lAHODXeC6c4BAqMIzgzZahU"
           OPTION_ID: "47fc9ee4"
         run: |
-          # Récupère les messages des commits entre before..sha (ou dernier commit si before invalide)
+          echo "==== Début du job ===="
+
+          # Récupère les messages des commits
           COMMITS=$(git log ${{ github.event.before }}..${{ github.sha }} --pretty=%B 2>/dev/null || git log -1 --pretty=%B)
+
+          echo "Commits trouvés :"
+          echo "$COMMITS"
 
           # Extrait tous les "refs #ID"
           ISSUES=$(echo "$COMMITS" | grep -oE 'refs #[0-9]+' | tr -d 'refs #' | tr '\n' ' ')
 
-          echo "Issues détectées: $ISSUES"
+          echo "Issues détectées : $ISSUES"
 
           for ISSUE_ID in $ISSUES; do
+            echo "------------------------------"
             echo "🔍 Processing issue #$ISSUE_ID"
+            echo "Repository: ${GITHUB_REPOSITORY_OWNER}/${GITHUB_REPOSITORY_NAME}"
 
-            # Récupérer l'ID de l'item dans le projet v2 lié à cette issue
-            ITEM_ID=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" \
-              -X POST -d "{\"query\":\"query { repository(owner: \\\"${GITHUB_REPOSITORY_OWNER}\\\", name: \\\"${GITHUB_REPOSITORY_NAME}\\\") { issue(number: $ISSUE_ID) { projectItems(first: 10) { nodes { id project { id } } } } } }\"}" \
-              https://api.github.com/graphql | jq -r --arg PROJECT_ID "$PROJECT_ID" '.data.repository.issue.projectItems.nodes[] | select(.project.id == $PROJECT_ID) | .id')
+            QUERY="query {
+              repository(owner: \\\"${GITHUB_REPOSITORY_OWNER}\\\", name: \\\"${GITHUB_REPOSITORY_NAME}\\\") {
+                issue(number: $ISSUE_ID) {
+                  id
+                  projectItems(first: 10) {
+                    nodes {
+                      id
+                      project { id title }
+                    }
+                  }
+                }
+              }
+            }"
+
+            echo "GraphQL Query envoyée :"
+            echo "$QUERY"
+
+            RAW_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" \
+              -X POST -d "{\"query\":\"$QUERY\"}" https://api.github.com/graphql)
+
+            echo "Réponse brute de l'API :"
+            echo "$RAW_RESPONSE" | jq .
+
+            ITEM_ID=$(echo "$RAW_RESPONSE" | jq -r --arg PROJECT_ID "$PROJECT_ID" '.data.repository.issue.projectItems.nodes[] | select(.project.id == $PROJECT_ID) | .id')
 
             if [ -z "$ITEM_ID" ] || [ "$ITEM_ID" == "null" ]; then
               echo "⚠️ Aucun projet lié trouvé pour l’issue #$ISSUE_ID → ignoré."
@@ -46,8 +73,25 @@ jobs:
 
             echo "✅ Found project item: $ITEM_ID → Moving to In Progress"
 
-            # Mettre à jour le champ Status -> In Progress
-            curl -s -H "Authorization: bearer $GITHUB_TOKEN" -X POST \
-              -d "{\"query\":\"mutation { updateProjectV2ItemFieldValue(input: { projectId: \\\"$PROJECT_ID\\\", itemId: \\\"$ITEM_ID\\\", fieldId: \\\"$STATUS_FIELD_ID\\\", value: { singleSelectOptionId: \\\"$OPTION_ID\\\" } }) { projectV2Item { id } } }\"}" \
-              https://api.github.com/graphql
+            MUTATION="mutation {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: \\\"$PROJECT_ID\\\",
+                itemId: \\\"$ITEM_ID\\\",
+                fieldId: \\\"$STATUS_FIELD_ID\\\",
+                value: { singleSelectOptionId: \\\"$OPTION_ID\\\" }
+              }) {
+                projectV2Item { id }
+              }
+            }"
+
+            echo "Mutation envoyée :"
+            echo "$MUTATION"
+
+            RESULT=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -X POST \
+              -d "{\"query\":\"$MUTATION\"}" https://api.github.com/graphql)
+
+            echo "Réponse de la mutation :"
+            echo "$RESULT" | jq .
           done
+
+          echo "==== Fin du job ===="
