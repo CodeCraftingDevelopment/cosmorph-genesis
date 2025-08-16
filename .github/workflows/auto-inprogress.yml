@@ -24,7 +24,7 @@ jobs:
         uses: peter-evans/move-project-card@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          project-url: 'https://github.com/CodeCraftingDevelopment/cosmorph-genesis.git'
+          project-url: 'https://github.com/users/CodeCraftingDevelopment/projects/1'
           column-name: 'In Progress'
           # Passer les IDs détectés
           issue-ids: ${{ steps.extract.outputs.issues }}
