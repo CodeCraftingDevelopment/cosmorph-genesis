@@ -23,20 +23,30 @@ jobs:
           STATUS_FIELD_ID: "PVTSSF_lAHODXeC6c4BAqMIzgzZahU"
           OPTION_ID: "47fc9ee4"
         run: |
-          # Récupère tous les refs #ID
-          ISSUES=$(git log ${{ github.event.before }}..${{ github.sha }} --pretty=%B | grep -oE 'refs #[0-9]+' | tr -d 'refs #' | tr '\n' ' ')
+          # Récupère les messages des commits entre before..sha (ou dernier commit si before invalide)
+          COMMITS=$(git log ${{ github.event.before }}..${{ github.sha }} --pretty=%B 2>/dev/null || git log -1 --pretty=%B)
+
+          # Extrait tous les "refs #ID"
+          ISSUES=$(echo "$COMMITS" | grep -oE 'refs #[0-9]+' | tr -d 'refs #' | tr '\n' ' ')
+
+          echo "Issues détectées: $ISSUES"
 
           for ISSUE_ID in $ISSUES; do
-            echo "Processing issue $ISSUE_ID"
+            echo "🔍 Processing issue #$ISSUE_ID"
 
-            # Récupérer l'item du projet correspondant à l'issue
+            # Récupérer l'ID de l'item dans le projet v2 lié à cette issue
             ITEM_ID=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" \
               -X POST -d "{\"query\":\"query { repository(owner: \\\"${GITHUB_REPOSITORY_OWNER}\\\", name: \\\"${GITHUB_REPOSITORY_NAME}\\\") { issue(number: $ISSUE_ID) { projectItems(first: 10) { nodes { id project { id } } } } } }\"}" \
               https://api.github.com/graphql | jq -r --arg PROJECT_ID "$PROJECT_ID" '.data.repository.issue.projectItems.nodes[] | select(.project.id == $PROJECT_ID) | .id')
 
-            echo "Found project item: $ITEM_ID"
+            if [ -z "$ITEM_ID" ] || [ "$ITEM_ID" == "null" ]; then
+              echo "⚠️ Aucun projet lié trouvé pour l’issue #$ISSUE_ID → ignoré."
+              continue
+            fi
 
-            # Mettre à jour le champ Status
+            echo "✅ Found project item: $ITEM_ID → Moving to In Progress"
+
+            # Mettre à jour le champ Status -> In Progress
             curl -s -H "Authorization: bearer $GITHUB_TOKEN" -X POST \
               -d "{\"query\":\"mutation { updateProjectV2ItemFieldValue(input: { projectId: \\\"$PROJECT_ID\\\", itemId: \\\"$ITEM_ID\\\", fieldId: \\\"$STATUS_FIELD_ID\\\", value: { singleSelectOptionId: \\\"$OPTION_ID\\\" } }) { projectV2Item { id } } }\"}" \
               https://api.github.com/graphql
