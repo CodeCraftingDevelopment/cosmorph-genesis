@@ -6,7 +6,7 @@ on:
       - '**'
 
 jobs:
-  move_issue:
+  move_issue_to_in_progress:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
