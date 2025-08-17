@@ -34,13 +34,18 @@ jobs:
           # -----------------------------
           # 1️⃣ Extraction de l'issue number (refs #123)
           # -----------------------------
-          $issueNumber = $null
-          if ($commitMessage -match "refs\s+#(\d+)") {
-              $issueNumber = [int]$Matches[1]
-              Write-Host "Issue trouvée dans le commit : #$issueNumber"
-          } else {
+          $issueNumbers = @()
+          $regex = [regex] "refs\s*#(\d+)"
+          foreach ($match in $regex.Matches($commitMessage)) {
+              $issueNumbers += [int]$match.Groups[1].Value
+          }
+          
+          if ($issueNumbers.Count -eq 0) {
               Write-Host "Aucune référence d'issue trouvée dans le commit, arrêt du script."
               exit 0
+          } else {
+              Write-Host "Issues trouvées dans le commit : $($issueNumbers -join ', ')"
+              $issueNumber = $issueNumbers[0]
           }
 
           # -----------------------------
