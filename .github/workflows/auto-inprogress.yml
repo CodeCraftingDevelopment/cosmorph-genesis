@@ -23,10 +23,10 @@ jobs:
           # 🔹 Configuration    
           # -----------------------------
           $token = $env:GITHUB_TOKEN
-          $repoOwner = $env:REPO_OWNER
-          $projectName = $env:REPO_NAME
-
-          Write-Host $token + " " + $repoOwner + " " + $projectName-
+          $repoOwner = "CodeCraftingDevelopment"
+          $projectName = "cosmorph-genesis"
+          #   $repoOwner = $env:REPO_OWNER
+          #   $projectName = $env:REPO_NAME
 
           # -----------------------------
           # 0️⃣ Récupération du message de commit
