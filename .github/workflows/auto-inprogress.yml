@@ -3,7 +3,7 @@ name: Move issue to In Progress on commit
 on:
   push:
     branches:
-      - development
+      - '**'
 
 jobs:
   move-issue:
