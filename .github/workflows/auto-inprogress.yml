@@ -20,15 +20,20 @@ jobs:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           # -----------------------------
-          # 🔹 Configuration
+          # 🔹 Configuration    
           # -----------------------------
           $token = $env:GITHUB_TOKEN
-          $projectName = $env:REPO_NAME
+          # $token = ""
+          $repoOwner = $env:REPO_OWNER
+          # $repoOwner = ""
+          # $projectName = $env:REPO_NAME
+          $projectName = ""
 
           # -----------------------------
           # 0️⃣ Récupération du message de commit
           # -----------------------------
           $commitMessage = git log -1 --pretty=%B
+          # $commitMessage = "refs #1 Mise à jour du projet cosmorph-genesis"
 
           # -----------------------------
           # 1️⃣ Extraction de l'issue number (refs #123)
@@ -70,7 +75,7 @@ jobs:
           # 3️⃣ Récupérer les projets attachés
           # -----------------------------
           $queryAttachedProjects = '{
-            repository(owner: "' + $env:REPO_OWNER + '", name: "' + $repo.name + '") {
+            repository(owner: "' + $repoOwner + '", name: "' + $repo.name + '") {
               projectsV2(first: 50) {
                 nodes { id number title }
               }
@@ -95,7 +100,7 @@ jobs:
           # 4️⃣ Récupérer les issues et les champs
           # -----------------------------
           $queryProjectIssues = '{
-            repository(owner: "' + $env:REPO_OWNER + '", name: "' + $repo.name + '") {
+            repository(owner: "' + $repoOwner + '", name: "' + $repo.name + '") {
               projectV2(number: ' + $project.number + ') {
                 id
                 title
