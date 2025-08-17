@@ -1,4 +1,4 @@
 Utilisation de Make pour envoyer un mail sur suppression de branche.
 Configuration du dépôt pour que lors d'un PR, la branche initiative soit supprimée.
 
-Modification de la gestion des statuts des issues, un seul fichier pour In progress et Done
+Modification de la gestion des statuts des issues, un seul fichier pour In progress et Done.
