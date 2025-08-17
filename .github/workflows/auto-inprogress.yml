@@ -1,4 +1,4 @@
-name: Move issue to In Progress
+name: Move issue to In Progress on commit
 
 on:
   push:
@@ -6,92 +6,156 @@ on:
       - '**'
 
 jobs:
-  move_issue:
+  move-issue:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - uses: actions/setup-powershell@v2
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 20
-
-      - name: Move issues via GitHub API
+      - name: Move Issue to In Progress
+        shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PROJECT_ID: "PVT_kwHODXeC6c4BAqMI"
-          STATUS_FIELD_ID: "PVTSSF_lAHODXeC6c4BAqMIzgzZahU"
-          OPTION_ID: "47fc9ee4"
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
-          echo "==== Début du job ===="
+          # -----------------------------
+          # 🔹 Configuration
+          # -----------------------------
+          $token = $env:GITHUB_TOKEN
+          $projectName = $env:REPO_NAME
 
-          # Récupère les messages des commits
-          COMMITS=$(git log ${{ github.event.before }}..${{ github.sha }} --pretty=%B 2>/dev/null || git log -1 --pretty=%B)
+          # -----------------------------
+          # 0️⃣ Récupération du message de commit
+          # -----------------------------
+          $commitMessage = git log -1 --pretty=%B
 
-          echo "Commits trouvés :"
-          echo "$COMMITS"
+          # -----------------------------
+          # 1️⃣ Extraction de l'issue number (refs #123)
+          # -----------------------------
+          if ($commitMessage -match "refs #(\d+)") {
+              $issueNumber = [int]$Matches[1]
+              Write-Host "Issue trouvée dans le commit : #$issueNumber"
+          } else {
+              Write-Host "Aucune référence d'issue trouvée dans le commit, arrêt du script."
+              exit 0
+          }
 
-          # Extrait tous les "refs #ID"
-          ISSUES=$(echo "$COMMITS" | grep -oE 'refs #[0-9]+' | tr -d 'refs #' | tr '\n' ' ')
+          # -----------------------------
+          # 2️⃣ Récupérer le repository
+          # -----------------------------
+          $queryRepos = '{
+            viewer {
+              repositories(first: 100, orderBy: {field: NAME, direction: ASC}) {
+                nodes { name }
+              }
+            }
+          }'
 
-          echo "Issues détectées : $ISSUES"
+          $bodyRepos = @{ query = $queryRepos } | ConvertTo-Json -Compress
+          $response = Invoke-RestMethod `
+              -Uri "https://api.github.com/graphql" `
+              -Method POST `
+              -Headers @{ Authorization = "Bearer $token" } `
+              -Body $bodyRepos `
+              -ContentType "application/json"
 
-          for ISSUE_ID in $ISSUES; do
-            echo "------------------------------"
-            echo "🔍 Processing issue #$ISSUE_ID"
-            echo "Repository: ${GITHUB_REPOSITORY_OWNER}/${GITHUB_REPOSITORY_NAME}"
+          $filteredRepos = $response.data.viewer.repositories.nodes | Where-Object { $_.name -eq "$projectName" }
+          if ($null -eq $filteredRepos -OR $filteredRepos.Count -eq 0) { throw "Le repository '$projectName' n'existe pas !" }
+          if ($filteredRepos.Count -gt 1) { throw "Le repository '$projectName' existe plusieurs fois !" }
 
-            QUERY="query {
-              repository(owner: \\\"${GITHUB_REPOSITORY_OWNER}\\\", name: \\\"${GITHUB_REPOSITORY_NAME}\\\") {
-                issue(number: $ISSUE_ID) {
-                  id
-                  projectItems(first: 10) {
-                    nodes {
+          $repo = $filteredRepos | Select-Object -First 1
+
+          # -----------------------------
+          # 3️⃣ Récupérer les projets attachés
+          # -----------------------------
+          $queryAttachedProjects = '{
+            repository(owner: "' + $env:REPO_OWNER + '", name: "' + $repo.name + '") {
+              projectsV2(first: 50) {
+                nodes { id number title }
+              }
+            }
+          }'
+
+          $bodyAttachedProjects = @{ query = $queryAttachedProjects } | ConvertTo-Json -Compress
+          $response = Invoke-RestMethod `
+              -Uri "https://api.github.com/graphql" `
+              -Method POST `
+              -Headers @{ Authorization = "Bearer $token" } `
+              -Body $bodyAttachedProjects `
+              -ContentType "application/json"
+
+          $projects = $response.data.repository.projectsV2.nodes
+          if ($null -eq $projects -OR $projects.Count -eq 0) { throw "Aucun projet attaché !" }
+          if ($projects.Count -gt 1) { throw "Plusieurs projets attachés, veuillez vérifier les doublons !" }
+
+          $project = $projects | Select-Object -First 1
+
+          # -----------------------------
+          # 4️⃣ Récupérer les issues et les champs
+          # -----------------------------
+          $queryProjectIssues = '{
+            repository(owner: "' + $env:REPO_OWNER + '", name: "' + $repo.name + '") {
+              projectV2(number: ' + $project.number + ') {
+                id
+                title
+                items(first: 100) {
+                  nodes {
+                    id
+                    content { ... on Issue { number title state url } }
+                  }
+                }
+                fields(first: 10) {
+                  nodes {
+                    ... on ProjectV2SingleSelectField {
                       id
-                      project { id title }
+                      name
+                      options { id name }
                     }
                   }
                 }
               }
-            }"
+            }
+          }'
 
-            echo "GraphQL Query envoyée :"
-            echo "$QUERY"
+          $bodyProjectIssues = @{ query = $queryProjectIssues } | ConvertTo-Json -Compress
+          $response = Invoke-RestMethod `
+              -Uri "https://api.github.com/graphql" `
+              -Method POST `
+              -Headers @{ Authorization = "Bearer $token" } `
+              -Body $bodyProjectIssues `
+              -ContentType "application/json"
 
-            RAW_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" \
-              -X POST -d "{\"query\":\"$QUERY\"}" https://api.github.com/graphql)
+          $issue = $response.data.repository.projectV2.items.nodes | Where-Object { $_.content.number -eq $issueNumber } | Select-Object -First 1
+          if ($null -eq $issue) { throw "Aucune issue #$issueNumber dans le projet '$($project.title)' !" }
 
-            echo "Réponse brute de l'API :"
-            echo "$RAW_RESPONSE" | jq .
+          $fieldStatus = $response.data.repository.projectV2.fields.nodes | Where-Object { $_.name -eq "Status" } | Select-Object -First 1
+          $optionInProgress = $fieldStatus.options | Where-Object { $_.name -eq "In Progress" } | Select-Object -First 1
 
-            ITEM_ID=$(echo "$RAW_RESPONSE" | jq -r --arg PROJECT_ID "$PROJECT_ID" '.data.repository.issue.projectItems.nodes[] | select(.project.id == $PROJECT_ID) | .id')
-
-            if [ -z "$ITEM_ID" ] || [ "$ITEM_ID" == "null" ]; then
-              echo "⚠️ Aucun projet lié trouvé pour l’issue #$ISSUE_ID → ignoré."
-              continue
-            fi
-
-            echo "✅ Found project item: $ITEM_ID → Moving to In Progress"
-
-            MUTATION="mutation {
-              updateProjectV2ItemFieldValue(input: {
-                projectId: \\\"$PROJECT_ID\\\",
-                itemId: \\\"$ITEM_ID\\\",
-                fieldId: \\\"$STATUS_FIELD_ID\\\",
-                value: { singleSelectOptionId: \\\"$OPTION_ID\\\" }
-              }) {
-                projectV2Item { id }
+          # -----------------------------
+          # 5️⃣ Mutation GraphQL pour passer l'issue en In Progress
+          # -----------------------------
+          $mutation = "
+          mutation {
+            updateProjectV2ItemFieldValue(
+              input: {
+                projectId: `"$($project.id)`",
+                itemId: `"$($issue.id)`",
+                fieldId: `"$($fieldStatus.id)`",
+                value: { singleSelectOptionId: `"$($optionInProgress.id)`" }
               }
-            }"
+            ) {
+              projectV2Item { id }
+            }
+          }"
 
-            echo "Mutation envoyée :"
-            echo "$MUTATION"
+          $bodyMutation = @{ query = $mutation } | ConvertTo-Json -Compress
+          $response = Invoke-RestMethod `
+              -Uri "https://api.github.com/graphql" `
+              -Method POST `
+              -Headers @{ Authorization = "Bearer $token" } `
+              -Body $bodyMutation `
+              -ContentType "application/json"
 
-            RESULT=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -X POST \
-              -d "{\"query\":\"$MUTATION\"}" https://api.github.com/graphql)
-
-            echo "Réponse de la mutation :"
-            echo "$RESULT" | jq .
-          done
-
-          echo "==== Fin du job ===="
+          Write-Host "Issue #$issueNumber mise à jour en 'In Progress' pour le projet '$($project.title)'."
