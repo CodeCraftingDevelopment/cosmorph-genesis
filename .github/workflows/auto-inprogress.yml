@@ -34,7 +34,8 @@ jobs:
           # -----------------------------
           # 1️⃣ Extraction de l'issue number (refs #123)
           # -----------------------------
-          if ($commitMessage -match "refs #(\d+)") {
+          $issueNumber = $null
+          if ($commitMessage -match "refs\s+#(\d+)") {
               $issueNumber = [int]$Matches[1]
               Write-Host "Issue trouvée dans le commit : #$issueNumber"
           } else {
