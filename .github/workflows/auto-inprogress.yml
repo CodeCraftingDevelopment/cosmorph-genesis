@@ -23,11 +23,8 @@ jobs:
           # 🔹 Configuration    
           # -----------------------------
           $token = $env:GITHUB_TOKEN
-          # $token = ""
           $repoOwner = $env:REPO_OWNER
-          # $repoOwner = ""
-          # $projectName = $env:REPO_NAME
-          $projectName = ""
+          $projectName = $env:REPO_NAME
 
           # -----------------------------
           # 0️⃣ Récupération du message de commit
