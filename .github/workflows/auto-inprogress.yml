@@ -14,7 +14,7 @@ jobs:
       - name: Move Issue to In Progress
         shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.test }}
           REPO_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
@@ -23,16 +23,13 @@ jobs:
           # 🔹 Configuration    
           # -----------------------------
           $token = $env:GITHUB_TOKEN
-          $repoOwner = "CodeCraftingDevelopment"
-          $projectName = "cosmorph-genesis"
-          #   $repoOwner = $env:REPO_OWNER
-          #   $projectName = $env:REPO_NAME
+          $repoOwner = $env:REPO_OWNER
+          $projectName = $env:REPO_NAME
 
           # -----------------------------
           # 0️⃣ Récupération du message de commit
           # -----------------------------
           $commitMessage = git log -1 --pretty=%B
-          # $commitMessage = "refs #1 Mise à jour du projet cosmorph-genesis"
 
           # -----------------------------
           # 1️⃣ Extraction de l'issue number (refs #123)
@@ -74,7 +71,7 @@ jobs:
           # 3️⃣ Récupérer les projets attachés
           # -----------------------------
           $queryAttachedProjects = '{
-            repository(owner: "CodeCraftingDevelopment", name: "cosmorph-genesis") {
+            repository(owner: "' + $repoOwner + '", name: "' + $repo.name + '") {
               projectsV2(first: 50) {
                 nodes { id number title }
               }
@@ -89,14 +86,7 @@ jobs:
               -Body $bodyAttachedProjects `
               -ContentType "application/json"
 
-          $response.data.repository.projectsV2.nodes
-
-          Write-Host "TEST AVANT"
-
           $projects = $response.data.repository.projectsV2.nodes
-
-          Write-Host "TEST APRES"
-                    
           if ($null -eq $projects -OR $projects.Count -eq 0) { throw "Aucun projet attaché !" }
           if ($projects.Count -gt 1) { throw "Plusieurs projets attachés, veuillez vérifier les doublons !" }
 
