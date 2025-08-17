@@ -26,6 +26,8 @@ jobs:
           $repoOwner = $env:REPO_OWNER
           $projectName = $env:REPO_NAME
 
+          Write-Host $token + " " + $repoOwner + " " + $projectName-
+
           # -----------------------------
           # 0️⃣ Récupération du message de commit
           # -----------------------------
