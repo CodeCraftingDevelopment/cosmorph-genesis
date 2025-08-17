@@ -74,7 +74,7 @@ jobs:
           # 3️⃣ Récupérer les projets attachés
           # -----------------------------
           $queryAttachedProjects = '{
-            repository(owner: "' + $repoOwner + '", name: "' + $repo.name + '") {
+            repository(owner: "CodeCraftingDevelopment", name: "cosmorph-genesis") {
               projectsV2(first: 50) {
                 nodes { id number title }
               }
