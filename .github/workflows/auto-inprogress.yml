@@ -89,6 +89,8 @@ jobs:
               -Body $bodyAttachedProjects `
               -ContentType "application/json"
 
+          $response.data.repository.projectsV2.nodes
+
           $projects = $response.data.repository.projectsV2.nodes
           if ($null -eq $projects -OR $projects.Count -eq 0) { throw "Aucun projet attaché !" }
           if ($projects.Count -gt 1) { throw "Plusieurs projets attachés, veuillez vérifier les doublons !" }
