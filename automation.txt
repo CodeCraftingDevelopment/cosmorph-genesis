@@ -1,0 +1,2 @@
+Utilisation de Make pour envoyer un mail sur suppression de branche.
+Configuration du dépôt pour que lors d'un PR, la branche initiative soit supprimée.
